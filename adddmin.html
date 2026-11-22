@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="bn"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#16212b"><title>Chatroom Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Sora:wght@700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#e9e4dc;--panel:#fffdf9;--ink:#1c2630;--muted:#6f7a84;--line:#e4ddd2;--accent:#1f3447;--gold:#b8894d;--soft:#efe9df;--danger:#b24545;--shadow:0 10px 40px #1c263014}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Hind Siliguri",system-ui,sans-serif}
+button,input{font:inherit}button{border:0;border-radius:12px;padding:9px 14px;background:var(--accent);color:#fff;cursor:pointer;font-weight:600}button:active{transform:scale(.97)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.danger{background:var(--danger)}.soft{background:var(--soft);color:var(--ink)}.ok{background:#3f7d55}
+.wrap{max-width:1150px;margin:auto;padding:18px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:24px;padding:20px;margin-bottom:14px;box-shadow:var(--shadow)}
+.brand{font:800 22px Sora,"Hind Siliguri",sans-serif;letter-spacing:-.5px}.muted{color:var(--muted);font-size:13px}h3{margin:0 0 8px}
+input{padding:12px 14px;border:1px solid var(--line);border-radius:12px;width:100%;background:#fff;color:var(--ink);outline:none}input:focus{border-color:var(--gold)}
+label{display:block;font-size:13px;font-weight:600;margin:12px 0 6px}
+.auth{max-width:410px;margin:10vh auto}.auth button{width:100%;margin-top:16px;padding:13px}
+.hidden{display:none!important}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row input{flex:1;min-width:150px}
+.user{display:flex;align-items:center;gap:9px;flex-wrap:wrap;border-top:1px solid var(--line);padding:12px 0}.user:first-of-type{border-top:0}.user .info{flex:1;min-width:170px}
+.pill{font-size:11px;border-radius:20px;padding:2px 9px;background:var(--soft);margin-left:6px;font-weight:600}.pill.active{background:#dcefe2;color:#2d6a43}.pill.disabled,.pill.rejected{background:#f4dcdc;color:#8c3030}.pill.pending{background:#f6ead2;color:#80601f}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.scroll{max-height:55vh;overflow:auto}
+.msg{padding:9px 12px;margin:6px 0;background:var(--soft);border-radius:12px;overflow-wrap:anywhere}.msg b{font-size:12px}
+.notice{background:var(--soft);padding:10px 14px;border-radius:12px;margin-top:12px}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:11px 18px;border-radius:14px;z-index:9;opacity:0;pointer-events:none;transition:opacity .25s}#toast.show{opacity:1}
+@media(max-width:700px){.wrap{padding:10px}.grid{grid-template-columns:1fr}}
+</style></head><body><main class="wrap">
+<div id="toast"></div>
+<section id="loginPanel" class="panel auth"><div class="brand">Control Room</div><p class="muted">Private management access</p><form id="adminLogin"><label>Admin Password</label><input id="adminPass" type="password" autocomplete="current-password" required><button>Enter Panel</button></form><div id="loginError" class="notice hidden"></div></section>
+<section id="dashboard" class="hidden">
+<header class="row" style="justify-content:space-between;margin-bottom:14px"><div><div class="brand">Sagor's Chatroom · Admin</div><div class="muted">অনুমোদন, অ্যাকাউন্ট ম্যানেজমেন্ট ও মডারেশন</div></div><button class="soft" id="adminLogout">Logout</button></header>
+<section class="panel"><h3>Admin পাসওয়ার্ড পরিবর্তন</h3><form id="pwForm" class="row"><input id="pwCur" type="password" placeholder="বর্তমান পাসওয়ার্ড" autocomplete="current-password" required><input id="pwNew" type="password" placeholder="নতুন পাসওয়ার্ড (৬+ অক্ষর)" autocomplete="new-password" required><input id="pwNew2" type="password" placeholder="নতুন পাসওয়ার্ড আবার" autocomplete="new-password" required><button>পরিবর্তন করুন</button></form></section>
+<div class="grid">
+<section class="panel"><h3>Pending Requests</h3><div id="pendingList" class="scroll">Loading...</div></section>
+<section class="panel"><h3>সব অ্যাকাউন্ট <span class="muted" id="count"></span></h3><div id="activeList" class="scroll">Loading...</div></section>
+</div>
+<section class="panel"><h3>Find user conversations</h3><div class="row"><input id="lookupId" inputmode="numeric" placeholder="১৬ সংখ্যার User ID"><button id="lookupBtn">Search</button></div><div id="userDetail" style="margin-top:10px"></div><div id="chatLog" class="scroll"></div></section>
+</section></main>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import {getDatabase,ref,get,update,onValue} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+const firebaseConfig={apiKey:"AIzaSyC8aJLxFDydGqDkaF3RPGdSXr6RLGXd0Bs",authDomain:"assanger-51e65.firebaseapp.com",databaseURL:"https://assanger-51e65-default-rtdb.firebaseio.com",projectId:"assanger-51e65",storageBucket:"assanger-51e65.firebasestorage.app",messagingSenderId:"887503433353",appId:"1:887503433353:web:8255955b0d958ea88e2058",measurementId:"G-5J5CC8HKNZ"};
+const DEFAULT_PASSWORD="ac@admin0099"; // প্রথমবারের ডিফল্ট; পরিবর্তন করলে hash হয়ে DB-তে সেভ হয়
+const sha=async s=>[...new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s)))].map(b=>b.toString(16).padStart(2,"0")).join("");
+async function currentHash(){try{const s=await get(ref(db,"adminConfig/passHash"));if(s.exists())return s.val()}catch(e){}return sha(DEFAULT_PASSWORD)}
+const app=initializeApp(firebaseConfig),db=getDatabase(app),$=id=>document.getElementById(id);
+const toast=m=>{const t=$("toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2800)};
+$("adminLogin").onsubmit=async e=>{e.preventDefault();const ok=(await sha($("adminPass").value))===(await currentHash());if(!ok){$("loginError").textContent="ভুল পাসওয়ার্ড";$("loginError").classList.remove("hidden");return}$("loginPanel").classList.add("hidden");$("dashboard").classList.remove("hidden");watchData()};
+$("pwForm").onsubmit=async e=>{e.preventDefault();const cur=$("pwCur").value,n=$("pwNew").value,c=$("pwNew2").value;
+ if((await sha(cur))!==(await currentHash()))return toast("বর্তমান পাসওয়ার্ড ভুল");
+ if(n.length<6)return toast("নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষর হতে হবে");
+ if(n!==c)return toast("নতুন পাসওয়ার্ড দুটো মিলছে না");
+ try{await update(ref(db,"adminConfig"),{passHash:await sha(n)});$("pwForm").reset();toast("পাসওয়ার্ড পরিবর্তন হয়েছে")}catch(err){alert("সেভ হয়নি: "+err.message)}};
+$("adminLogout").onclick=()=>location.reload();
+
+function userRow(u,buttons){
+ const d=document.createElement("div");d.className="user";const info=document.createElement("div");info.className="info";
+ info.innerHTML="<b></b><span class='pill'></span><div class='muted'></div>";
+ info.querySelector("b").textContent=u.nickname||"(নামহীন)";const p=info.querySelector(".pill");p.textContent=u.status;p.classList.add(u.status);info.querySelector(".muted").textContent=u.id;
+ d.append(info,...buttons);return d
+}
+const btn=(t,cls,fn)=>{const b=document.createElement("button");b.textContent=t;if(cls)b.className=cls;b.onclick=fn;return b};
+
+/* অ্যাকাউন্ট সম্পূর্ণ ডিলিট: প্রোফাইল, ID, রিকোয়েস্ট, ইনবক্স ও তার সব প্রাইভেট চ্যাট/মেসেজ */
+async function deleteAccount(u){
+ if(!confirm(`"${u.nickname}" (${u.id}) অ্যাকাউন্টটি স্থায়ীভাবে ডিলিট করবেন?\nতার সব চ্যাট ও মেসেজও মুছে যাবে।`))return;
+ try{
+  const up={};
+  up["users/"+u.uid]=null;up["idIndex/"+u.id]=null;up["registrationRequests/"+u.uid]=null;up["userChats/"+u.uid]=null;
+  const chats=await get(ref(db,"userChats/"+u.uid));
+  if(chats.exists())Object.entries(chats.val()).forEach(([cid,c])=>{up["messages/"+cid]=null;if(c.peerUid)up["userChats/"+c.peerUid+"/"+cid]=null});
+  await update(ref(db),up);toast("অ্যাকাউন্ট ডিলিট হয়েছে")
+ }catch(e){alert("ডিলিট হয়নি: "+e.message)}
+}
+// Cloud Function (resetPassword) deploy করার পর তার URL এখানে বসান
+const RESET_URL="";
+async function resetUserPassword(u){
+ if(!RESET_URL)return alert("ইউজারের পাসওয়ার্ড বদলাতে Cloud Function লাগে। functions/ ফোল্ডার deploy করে admin.html এর RESET_URL এ সেই URL বসান।");
+ const np=prompt(`"${u.nickname}" (${u.id}) এর নতুন পাসওয়ার্ড (কমপক্ষে ৬ অক্ষর):`);if(np===null)return;
+ if(np.length<6)return alert("পাসওয়ার্ড কমপক্ষে ৬ অক্ষর হতে হবে");
+ const ap=prompt("নিশ্চিত করতে Admin পাসওয়ার্ড দিন:");if(!ap)return;
+ try{const r=await fetch(RESET_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({adminPassword:ap,uid:u.uid,newPassword:np})});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.status);toast("পাসওয়ার্ড পরিবর্তন হয়েছে")}catch(e){alert("পরিবর্তন হয়নি: "+e.message)}
+}
+const setStatus=(uid,status)=>update(ref(db,"users/"+uid),{status});
+
+function watchData(){
+ onValue(ref(db,"registrationRequests"),s=>{
+  const root=$("pendingList");root.replaceChildren();
+  const list=s.exists()?Object.values(s.val()).filter(x=>x.status==="pending"):[];
+  if(!list.length){root.textContent="কোনো pending request নেই";return}
+  list.forEach(u=>root.append(userRow({...u,status:"pending"},[
+   btn("Approve","ok",async()=>{await update(ref(db),{["users/"+u.uid+"/status"]:"active",["registrationRequests/"+u.uid+"/status"]:"approved"});toast("অনুমোদন হয়েছে")}),
+   btn("Reject","soft",async()=>{await update(ref(db),{["users/"+u.uid+"/status"]:"rejected",["registrationRequests/"+u.uid+"/status"]:"rejected"})}),
+   btn("Password","soft",()=>resetUserPassword(u)),btn("Delete","danger",()=>deleteAccount(u))])))
+ });
+ onValue(ref(db,"users"),s=>{
+  const root=$("activeList");root.replaceChildren();
+  const list=s.exists()?Object.values(s.val()).filter(u=>u.status!=="pending"):[];
+  $("count").textContent="("+list.length+")";
+  if(!list.length){root.textContent="কোনো অ্যাকাউন্ট নেই";return}
+  list.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).forEach(u=>root.append(userRow(u,[
+   u.status==="active"?btn("Deactivate","soft",()=>setStatus(u.uid,"disabled")):btn("Activate","ok",()=>setStatus(u.uid,"active")),
+   btn("Password","soft",()=>resetUserPassword(u)),btn("Delete","danger",()=>deleteAccount(u))])))
+ })
+}
+
+let lookupId=null;
+async function loadLookup(){
+ const id=lookupId,box=$("userDetail"),log=$("chatLog");box.replaceChildren();log.replaceChildren();if(!id)return;
+ const ix=await get(ref(db,"idIndex/"+id));if(!ix.exists()){box.textContent="User not found";return}
+ const uid=ix.val(),u=(await get(ref(db,"users/"+uid))).val()||{};
+ const t=document.createElement("b");t.textContent=(u.nickname||"")+" · "+id;box.append(t);
+ const chats=await get(ref(db,"userChats/"+uid));if(!chats.exists()){log.textContent="No conversations";return}
+ for(const [cid,meta] of Object.entries(chats.val())){
+  if(meta.type&&meta.type!=="private")continue;
+  const hd=document.createElement("div");hd.className="row";hd.style.marginTop="12px";
+  const h=document.createElement("h4");h.style.cssText="margin:0;flex:1";h.textContent=meta.title||cid;
+  hd.append(h,btn("পুরো চ্যাট ডিলিট","danger",async()=>{if(!confirm("এই চ্যাটের সব মেসেজ ডিলিট করবেন?"))return;const up={["messages/"+cid]:null,["userChats/"+uid+"/"+cid+"/lastMessage"]:null};if(meta.peerUid)up["userChats/"+meta.peerUid+"/"+cid+"/lastMessage"]=null;await update(ref(db),up);toast("চ্যাট ডিলিট হয়েছে");loadLookup()}));
+  log.append(hd);
+  const msgs=await get(ref(db,"messages/"+cid));
+  if(msgs.exists())Object.entries(msgs.val()).forEach(([k,m])=>{
+   const p=document.createElement("div");p.className="msg row";const tx=document.createElement("div");tx.style.cssText="flex:1;min-width:0";
+   const b=document.createElement("b");b.textContent=(m.fromName||m.from)+" · "+(m.createdAt?new Date(m.createdAt).toLocaleString("bn-BD"):"")+" ";const br=document.createElement("div");br.textContent=m.text;tx.append(b,br);
+   const del=btn("Delete","danger",async()=>{if(!confirm("এই মেসেজটি ডিলিট করবেন?"))return;await update(ref(db),{["messages/"+cid+"/"+k]:null});toast("মেসেজ ডিলিট হয়েছে");loadLookup()});del.style.padding="6px 10px";
+   p.append(tx,del);log.append(p)})
+ }
+}
+$("lookupBtn").onclick=()=>{lookupId=$("lookupId").value.trim();loadLookup()};
+</script></body></html>
